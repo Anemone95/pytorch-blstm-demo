@@ -100,9 +100,9 @@ class TextDataset(Dataset):
                 self.max_len = len(words)
 
     def __getitem__(self, item):
-        txt = torch.LongTensor(np.zeros(self.max_len, dtype=np.int64))
+        # txt = torch.LongTensor(np.zeros(self.max_len, dtype=np.int64))
         WORD, LABEL = 0, 1
-        # txt = torch.zeros(len(self.data[item][WORD]), dtype=torch.long)
+        txt = torch.zeros(len(self.data[item][WORD]), dtype=torch.long)
         for i, token in enumerate(self.data[item][WORD]):
             txt[i] = token
         label = torch.LongTensor([int(self.data[item][LABEL])])

@@ -10,6 +10,7 @@
 import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn
+import torch.nn.utils.rnn as rnn_utils
 from torch.autograd import Variable
 import torch.optim as optim
 
@@ -18,7 +19,7 @@ import blstm
 import text
 
 EPOCH = 20
-BATCH_SIZE = 2
+BATCH_SIZE = 3
 HAS_GPU = torch.cuda.is_available()
 BASE_LEARNING_RATE = 0.01
 EMBEDDING_DIM = 8  # embedding
@@ -33,16 +34,28 @@ def adjust_learning_rate(optimizer, epoch):
     return optimizer
 
 
+def collate_fn(data):
+    X, Y = 0, 1
+    data.sort(key=lambda x: len(x[X]), reverse=True)
+    data_x = list(map(lambda e: e[X], data))
+    data_lengths = [len(sq) for sq in data_x]
+    data_x = rnn_utils.pad_sequence(data_x, batch_first=True, padding_value=0)
+    data_y = torch.LongTensor(list(map(lambda e: e[Y], data)))
+
+    return data_x, data_lengths, data_y
+
+
 def train():
     data_iter = text.DataIterator("./data/train.txt")
     tokenizer = text.Tokenizer(sentence_iterator=map(lambda e: e[0], data_iter))
 
-    dataset=text.TextDataset(data_iterator=data_iter, tokenizer=tokenizer)
+    dataset = text.TextDataset(data_iterator=data_iter, tokenizer=tokenizer)
 
     train_loader = DataLoader(dataset,
                               batch_size=BATCH_SIZE,
                               shuffle=True,
-                              num_workers=1
+                              num_workers=1,
+                              collate_fn=collate_fn,
                               )
 
     ### create model
@@ -66,8 +79,9 @@ def train():
         total_loss = 0.0
         total = 0.0
         for iter, traindata in enumerate(train_loader):
-            train_inputs, train_labels = traindata
-            train_labels = torch.squeeze(train_labels)
+            train_inputs, lengths, train_labels = traindata
+            if len(train_labels.shape)>1:
+                train_labels = torch.squeeze(train_labels)
 
             # if use_gpu:
             #     train_inputs, train_labels = Variable(train_inputs.cuda()), train_labels.cuda()
@@ -78,7 +92,8 @@ def train():
             model.zero_grad()
             # TODO
             model.batch_size = len(train_labels)
-            output = model(train_inputs.t())
+            # 转置，否则需要batchfirst=True
+            output = model(train_inputs.t(), lengths)
 
             loss = loss_function(output, Variable(train_labels))
             loss.backward()

@@ -7,6 +7,7 @@
 :license: Apache 2.0, see LICENSE for more details.
 """
 import torch.nn as nn
+import torch.nn.utils.rnn as rnn_utils
 
 
 class BLSTM(nn.Module):
@@ -24,11 +25,13 @@ class BLSTM(nn.Module):
                             bidirectional=True)
         self.hidden2label = nn.Linear(hidden_dim * self.num_directions, label_size)
 
-    def forward(self, sentence):
-        embeds = self.word_embeddings(sentence)
-        x = embeds.view(len(sentence), self.batch_size, -1)
-        lstm_out, (h_n, h_c) = self.lstm(x, None)
-        y = self.hidden2label(lstm_out[-1])
+    def forward(self, sentences, lengths):
+        embeds = self.word_embeddings(sentences)
+        x = embeds.view(len(sentences), self.batch_size, -1)
+        x_packed = rnn_utils.pack_padded_sequence(x, lengths)
+        lstm_out, (h_n, h_c) = self.lstm(x_packed, None)
+        x_unpacked, lengths= rnn_utils.pad_packed_sequence(lstm_out)
+        y = self.hidden2label(x_unpacked[-1])
         return y
 
 
