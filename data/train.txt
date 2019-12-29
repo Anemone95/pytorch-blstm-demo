@@ -1,0 +1,10 @@
+Well done,1
+Good work,1
+Great effort,1
+nice work,1
+good quality,1
+Weak,0
+Poor effort,0
+not good,0
+poor work,0
+Could have done better,0
