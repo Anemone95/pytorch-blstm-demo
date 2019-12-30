@@ -13,17 +13,16 @@ import torch.nn as nn
 import torch.nn.utils.rnn as rnn_utils
 from torch.autograd import Variable
 import torch.optim as optim
-
-## hyper parameter
 import blstm
 import text
 
+## hyper parameter
 EPOCH = 20
 BATCH_SIZE = 3
 HAS_GPU = torch.cuda.is_available()
 BASE_LEARNING_RATE = 0.01
 EMBEDDING_DIM = 8  # embedding
-HIDDEN_DIM = 2  # hidden dim
+HIDDEN_DIM = 16  # hidden dim
 LABEL_NUM = 2  # number of labels
 
 
@@ -34,29 +33,16 @@ def adjust_learning_rate(optimizer, epoch):
     return optimizer
 
 
-def collate_fn(data):
-    X, Y = 0, 1
-    data.sort(key=lambda x: len(x[X]), reverse=True)
-    data_x = list(map(lambda e: e[X], data))
-    data_lengths = [len(sq) for sq in data_x]
-    data_x = rnn_utils.pad_sequence(data_x, batch_first=True, padding_value=0)
-    data_y = torch.LongTensor(list(map(lambda e: e[Y], data)))
-
-    return data_x, data_lengths, data_y
-
-
 def train():
-    data_iter = text.DataIterator("./data/train.txt")
-    tokenizer = text.Tokenizer(sentence_iterator=map(lambda e: e[0], data_iter))
-
-    dataset = text.TextDataset(data_iterator=data_iter, tokenizer=tokenizer)
+    dataset = text.TextDataset(data_file="./data/train.txt")
+    tokenizer = text.Tokenizer()
+    tokenizer.build_dict(dataset)
 
     train_loader = DataLoader(dataset,
                               batch_size=BATCH_SIZE,
                               shuffle=True,
                               num_workers=1,
-                              collate_fn=collate_fn,
-                              )
+                              collate_fn=tokenizer.tokenize_labeled_batch)
 
     ### create model
     model = blstm.BLSTM(embedding_dim=EMBEDDING_DIM, hidden_dim=HIDDEN_DIM,
@@ -80,19 +66,16 @@ def train():
         total = 0.0
         for iter, traindata in enumerate(train_loader):
             train_inputs, lengths, train_labels = traindata
-            if len(train_labels.shape)>1:
+            if len(train_labels.shape) > 1:
                 train_labels = torch.squeeze(train_labels)
 
-            # if use_gpu:
-            #     train_inputs, train_labels = Variable(train_inputs.cuda()), train_labels.cuda()
-            # else:
-            #     train_inputs = Variable(train_inputs)
+            if HAS_GPU:
+                train_inputs, train_labels = train_inputs.cuda(), train_labels.cuda()
 
             # 清空梯度
             model.zero_grad()
             #
-            # 转置，否则需要batchfirst=TrueTODO
-            #             model.batch_size = len(train_labels)
+            # 转置，否则需要batchfirst=True
             output = model(train_inputs.t(), lengths)
 
             loss = loss_function(output, Variable(train_labels))

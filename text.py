@@ -7,8 +7,27 @@
 :license: Apache 2.0, see LICENSE for more details.
 """
 import torch
-import numpy as np
+
+import torch.nn.utils.rnn as rnn_utils
 from torch.utils.data.dataset import Dataset
+
+PADDING_VALUE = 0
+
+class TextDataset(Dataset):
+    def __init__(self, data_file):
+        self.data = list()
+        with open(data_file, 'r') as f:
+            for e in f.readlines():
+                sentence, label = e.strip().split(',')
+                self.data.append((sentence, label))
+
+    def __getitem__(self, item) -> (str, torch.Tensor):
+        WORD, LABEL = 0, 1
+        label = torch.LongTensor([int(self.data[item][LABEL])])
+        return self.data[item][WORD], label
+
+    def __len__(self):
+        return len(self.data)
 
 
 class WordTokenDict:
@@ -38,85 +57,58 @@ class WordTokenDict:
 
 class Tokenizer:
 
-    def __init__(self, sentence_iterator: [str] = None, freq_gt: int = 0, token_dict: WordTokenDict = None):
-        if not token_dict and not sentence_iterator:
-            raise AttributeError("Must specify sentence_iterator or token_dict")
-        if token_dict:
-            self.dict = token_dict
-        else:
-            self.dict = WordTokenDict()
-            self._update_dict(sentence_iterator, gt=freq_gt)
+    def __init__(self, freq_gt: int = 0, token_dict: WordTokenDict = None):
+        self.dict = token_dict
+        self.freq_gt = freq_gt
 
     def __str__(self):
-        return self.dict.__str__()
+        if self.dict:
+            return "Tokenizer(" + self.dict.__str__() + ")"
+        else:
+            return "Tokenizer(None)"
 
-    def _update_dict(self, sentence_iterator: [str], gt: int) -> {str: int}:
+    def build_dict(self, dataset: TextDataset) -> WordTokenDict:
+        self.dict = WordTokenDict()
         # generate_dict
         word_freq = {}
-        for sample in sentence_iterator:
-            for word in sample.split():
+        for sentence, label in dataset:
+            for word in sentence.split():
                 word = word.strip()
                 if word in word_freq:
                     word_freq[word] += 1
                 else:
                     word_freq[word] = 1
         for word, freq in word_freq.items():
-            if freq > gt:
+            if freq > self.freq_gt:
                 self.dict.add_word(word)
         return self.dict
 
     def encode(self, string: str) -> [int]:
+        if not self.dict:
+            raise AttributeError("Must specify sentence_iterator or token_dict")
         words = string.split()
         encoded = map(lambda e: self.dict.wtoi(e.strip()), words)
         return list(encoded)
 
     def decode(self, int_list: [int]) -> str:
+        if not self.dict:
+            raise AttributeError("Must specify sentence_iterator or token_dict")
         return " ".join(map(lambda e: self.dict.itow(e), int_list))
 
+    def tokenize_labeled_batch(self, data: [(str, torch.Tensor)]) -> (torch.Tensor, torch.Tensor, torch.Tensor):
+        X, Y = 0, 1
+        data = list(map(lambda e: (torch.LongTensor(self.encode(e[X])), e[Y]), data))
+        data.sort(key=lambda x: len(x[X]), reverse=True)
+        data_x = list(map(lambda e: e[X], data))
+        data_lengths = [len(sq) for sq in data_x]
+        data_x = rnn_utils.pad_sequence(data_x, batch_first=True, padding_value=PADDING_VALUE)
+        data_y = torch.LongTensor(list(map(lambda e: e[Y], data)))
 
-class DataIterator:
-    def __init__(self, datafile):
-        self.datafile = datafile
-        self.data_generator = self._generator()
-
-    def __iter__(self):
-        self.data_generator = self._generator()
-        return self.data_generator
-
-    def _generator(self):
-        with open(self.datafile, 'r') as f:
-            for e in f.readlines():
-                sentence, label = e.split(',')
-                yield sentence, label.strip()
-
-
-class TextDataset(Dataset):
-    def __init__(self, data_iterator: DataIterator, tokenizer: Tokenizer):
-        self.data = list(map(lambda e: (tokenizer.encode(e[0]), e[1]), data_iterator))
-        self.max_len = 0
-        self.tokenizer = tokenizer
-        for words, _ in self.data:
-            if len(words) > self.max_len:
-                self.max_len = len(words)
-
-    def __getitem__(self, item):
-        # txt = torch.LongTensor(np.zeros(self.max_len, dtype=np.int64))
-        WORD, LABEL = 0, 1
-        txt=torch.LongTensor(self.data[item][WORD])
-        label = torch.LongTensor([int(self.data[item][LABEL])])
-        return txt, label
-
-    def __len__(self):
-        return len(self.data)
+        return data_x, data_lengths, data_y
 
 
 if __name__ == '__main__':
-    s = "I love you"
-    s1 = "hello world"
-    sarr = [s, s1]
-    tokenizer = Tokenizer(sarr)
-    print(tokenizer.encode(s))
-    print(tokenizer.decode([2, 3, 6]))
+    pass
     # for i in DataIterator('./data/train.txt'):
     #     print(i)
     # pass

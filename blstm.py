@@ -28,18 +28,16 @@ class BLSTM(nn.Module):
     def get_bi_last_output(self, lstm_out: Tensor, lengths: Tensor, batch_first=False) -> Tensor:
         if batch_first:
             raise NotImplementedError
-        # forward_last_output = torch.zeros(lengths.shape[0], self.hidden_dim, dtype=torch.float)
         indices = lengths - 1
         # @Anemone 因为输入向后传播，考虑batch中的padding，根据lengths从lstm_out中获取最后一个输入的输出
         indices = indices.unsqueeze(1).expand(lstm_out.shape[1:]).unsqueeze(0)
         forward_last_output = lstm_out.gather(0, indices)[0]
-        # forward_last_output = forward_last_output.squeeze()
 
         backward_last_output = lstm_out[0]
 
-        forward_last_output = forward_last_output.index_select(1, torch.range(0, self.hidden_dim - 1, dtype=torch.long))
+        forward_last_output = forward_last_output.index_select(1, torch.arange(0, self.hidden_dim, dtype=torch.long))
         backward_last_output = backward_last_output.index_select(1,
-                                                                 torch.range(self.hidden_dim, self.hidden_dim * 2 - 1,
+                                                                 torch.arange(self.hidden_dim, self.hidden_dim * 2,
                                                                              dtype=torch.long))
         last_output = torch.cat([forward_last_output, backward_last_output], dim=1)
         return last_output
