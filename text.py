@@ -113,11 +113,12 @@ class TextDataset(Dataset):
 
 
 if __name__ == '__main__':
-    # s = "I love you"
-    # s1 = "hello world"
-    # sarr = [s, s1]
-    # tokenizer = Tokenizer(sentence_generator=sarr)
-    # print(tokenizer.decode([2, 3, 6]))
-    for i in DataIterator('./data/train.txt'):
-        print(i)
-    pass
+    s = "I love you"
+    s1 = "hello world"
+    sarr = [s, s1]
+    tokenizer = Tokenizer(sarr)
+    print(tokenizer.encode(s))
+    print(tokenizer.decode([2, 3, 6]))
+    # for i in DataIterator('./data/train.txt'):
+    #     print(i)
+    # pass
