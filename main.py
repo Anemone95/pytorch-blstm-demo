@@ -70,7 +70,7 @@ def train():
                 train_labels = torch.squeeze(train_labels)
 
             if HAS_GPU:
-                train_inputs, train_labels = train_inputs.cuda(), train_labels.cuda()
+                train_inputs, lengths, train_labels = train_inputs.cuda(), lengths.cuda(), train_labels.cuda()
 
             # 清空梯度
             model.zero_grad()

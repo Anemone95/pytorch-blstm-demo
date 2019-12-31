@@ -19,7 +19,7 @@ class BLSTM(nn.Module):
         self.hidden_dim = hidden_dim
         self.use_gpu = use_gpu
         self.num_directions = 2
-        self.batch_first=batch_first
+        self.batch_first = batch_first
         self.word_embeddings = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
         self.lstm = nn.LSTM(input_size=embedding_dim, hidden_size=hidden_dim, num_layers=1, dropout=0.5,
                             bidirectional=True, batch_first=self.batch_first)
@@ -47,26 +47,34 @@ class BLSTM(nn.Module):
         forward_indices = lengths - 1
         if self.batch_first:
             # lstm_out=batch*sentence_len*(hiddendim*2)
-            forward_indices = forward_indices.unsqueeze(1).unsqueeze(1).expand(batch_size, 1,self.hidden_dim)
-            backward_indices = torch.zeros(batch_size, 1, self.hidden_dim, dtype=torch.long)
+            forward_indices = forward_indices.unsqueeze(1).unsqueeze(1).expand(batch_size, 1, self.hidden_dim)
+            if self.use_gpu:
+                backward_indices = torch.cuda.LongTensor(batch_size, 1, self.hidden_dim).fill_(0)
+            else:
+                backward_indices = torch.zeros(batch_size, 1, self.hidden_dim, dtype=torch.long)
             indices = torch.cat([forward_indices, backward_indices], dim=2)
             last_output = lstm_out.gather(1, indices).squeeze(1)
         else:
             # lstm_out=batch*sentence_len*(hiddendim*2)
             # @Anemone 因为输入向后传播，考虑batch中的padding，根据lengths从lstm_out中获取最后一个输入的输出
             forward_indices = forward_indices.unsqueeze(1).expand(batch_size, self.hidden_dim).unsqueeze(0)
-            backward_indices = torch.zeros(1, batch_size, self.hidden_dim, dtype=torch.long)
+            if self.use_gpu:
+                backward_indices = torch.cuda.LongTensor(1, batch_size, self.hidden_dim).fill_(0)
+            else:
+                backward_indices = torch.zeros(1, batch_size, self.hidden_dim, dtype=torch.long)
             indices = torch.cat([forward_indices, backward_indices], dim=2)
 
             last_output = lstm_out.gather(0, indices).squeeze(0)
         return last_output
 
-    def forward(self, sentences: Tensor, lengths: [int]):
+    def forward(self, sentences: Tensor, lengths: Tensor):
         embeds = self.word_embeddings(sentences)
         x_packed = rnn_utils.pack_padded_sequence(embeds, lengths, batch_first=self.batch_first)
-        lstm_out, (h_n, h_c) = self.lstm(x_packed)
+        lstm_out, (h_n, h_c) = self.lstm(x_packed, None)
         lstm_out_unpacked, lstm_out_lengths = rnn_utils.pad_packed_sequence(lstm_out, batch_first=self.batch_first)
-        # @Anemone 这里不应该用x_unpacked[-1], 而因该用lengths获取最后真实的序列最后一位
+        if self.use_gpu:
+            lstm_out_lengths = lstm_out_lengths.cuda()
+        # @Anemone 这里不应该用unpacked[-1], 而因该用lengths获取最后真实的序列最后一位
         last_lstm_out = self.get_bi_last_output(lstm_out_unpacked, lstm_out_lengths)
         y = self.hidden2label(last_lstm_out)
         return y
