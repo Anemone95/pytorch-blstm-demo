@@ -22,7 +22,7 @@ BATCH_SIZE = 3
 HAS_GPU = torch.cuda.is_available()
 BASE_LEARNING_RATE = 0.01
 EMBEDDING_DIM = 8  # embedding
-HIDDEN_DIM = 16  # hidden dim
+HIDDEN_DIM = 2  # hidden dim
 LABEL_NUM = 2  # number of labels
 
 
@@ -76,9 +76,9 @@ def train():
             model.zero_grad()
             #
             # 转置，否则需要batchfirst=True
-            output = model(train_inputs.t(), lengths)
+            output = model(train_inputs, lengths)
 
-            loss = loss_function(output, Variable(train_labels))
+            loss = loss_function(output, train_labels)
             loss.backward()
             optimizer.step()
 
