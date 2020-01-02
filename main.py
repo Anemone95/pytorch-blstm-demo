@@ -15,6 +15,7 @@ from torch.autograd import Variable
 import torch.optim as optim
 import blstm
 import text
+from metriccalculator import MetricCalculator
 
 ## hyper parameter
 EPOCH = 20
@@ -57,6 +58,7 @@ def train():
     train_acc_ = []
     test_acc_ = []
 
+    metric = MetricCalculator()
     for epoch in range(EPOCH):
         optimizer = adjust_learning_rate(optimizer, epoch)
 
@@ -84,15 +86,20 @@ def train():
 
             # calc training acc
             _, predicted = torch.max(output.data, 1)
-            total_acc += (predicted == train_labels).sum()
+            if HAS_GPU:
+                metric.update(predicted.cpu(), train_labels.cpu())
+            else:
+                metric.update(predicted, train_labels)
             total += len(train_labels)
-            # total_loss += loss.data[0]
+            total_loss += loss.item()
 
         train_loss_.append(total_loss / total)
-        train_acc_.append(total_acc / total)
+        accuracy, recall, precision = metric.compute(["accuracy", "recall", "precision"])
 
-        print('[Epoch: %3d/%3d] Training Loss: %.3f, Training Acc: %.3f'
-              % (epoch, EPOCH, train_loss_[epoch], train_acc_[epoch],))
+        print("[Epoch: {cur_epoch}/{total_epoch}] Training Loss: {loss:.3}, "
+              "Training Acc: {acc:.3}, Training Precision: {precision:.3}, Training Recall: {recall:.3}, Training F1: {f1:.3}"
+              .format(cur_epoch=epoch, total_epoch=EPOCH, loss=train_loss_[epoch],
+                      acc=accuracy, precision=precision, recall=recall, f1=(2*precision*recall)/(precision+recall)))
 
 
 if __name__ == '__main__':
